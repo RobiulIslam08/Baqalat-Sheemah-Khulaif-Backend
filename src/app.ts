@@ -51,11 +51,19 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
     await connectDB();
     next();
   } catch (err) {
-    console.error('Failed to connect to MongoDB:', err);
+    const text = err instanceof Error ? err.message : String(err);
+    console.error('Failed to connect to MongoDB:', text);
+    const message = text.includes('DATABASE_URL is not set')
+      ? 'DATABASE_URL is missing on the server.'
+      : /bad auth|authentication failed/i.test(text)
+        ? 'MongoDB rejected the username or password.'
+        : /whitelist|Could not connect|ENOTFOUND|querySrv|timed out/i.test(text)
+          ? 'MongoDB Atlas blocked this server. Allow 0.0.0.0/0 in Network Access.'
+          : 'Database connection failed. Please try again later.';
     res.status(503).json({
       success: false,
-      message: 'Database connection failed. Please try again later.',
-      errorSources: [{ path: '', message: 'Database connection failed' }],
+      message,
+      errorSources: [{ path: '', message }],
     });
   }
 });
