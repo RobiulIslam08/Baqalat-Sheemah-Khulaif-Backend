@@ -1,5 +1,5 @@
 import httpStatus from 'http-status';
-import { startSession } from '../../DB/sqlite';
+import { startSession } from '../../DB/session';
 import { Purchase } from './purchase.model';
 import { IPurchase } from './purchase.interface';
 import { ProductLink } from '../ProductLink/productLink.model';

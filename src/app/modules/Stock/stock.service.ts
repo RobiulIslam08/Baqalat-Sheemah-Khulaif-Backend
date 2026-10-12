@@ -1,5 +1,5 @@
 import httpStatus from 'http-status';
-import { startSession } from '../../DB/sqlite';
+import { startSession } from '../../DB/session';
 import { Product } from '../Product/product.model';
 import { StockReturn, StockCorrection } from './stock.model';
 import { IStockReturn, IStockCorrection } from './stock.interface';

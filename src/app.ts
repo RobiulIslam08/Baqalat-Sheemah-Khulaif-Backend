@@ -51,7 +51,7 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
     await connectDB();
     next();
   } catch (err) {
-    console.error('Failed to open the local database:', err);
+    console.error('Failed to connect to MongoDB:', err);
     res.status(503).json({
       success: false,
       message: 'Database connection failed. Please try again later.',
@@ -62,6 +62,7 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
 
 // API routes
 app.use('/api/v1', router);
+app.use('/v1', router);
 
 const staticDir = process.env.POS_STATIC_DIR;
 if (staticDir && fs.existsSync(staticDir)) {

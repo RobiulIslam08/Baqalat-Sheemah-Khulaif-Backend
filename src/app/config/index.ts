@@ -19,10 +19,4 @@ export default {
   admin_password: process.env.ADMIN_PASSWORD || 'admin123',
   license_secret: process.env.LICENSE_SECRET || 'sheemah-khulaif-aayed-pos-license-v1',
   developer_password: process.env.DEVELOPER_PASSWORD || 'Dev@SheemahPOS',
-  db_type: process.env.DB_TYPE || (process.env.DB_NAME ? 'mysql' : 'sqlite'),
-  db_host: process.env.DB_HOST || 'localhost',
-  db_port: Number(process.env.DB_PORT) || 3306,
-  db_user: process.env.DB_USER || 'root',
-  db_pass: process.env.DB_PASS || '',
-  db_name: process.env.DB_NAME || 'shimakhalip',
 };

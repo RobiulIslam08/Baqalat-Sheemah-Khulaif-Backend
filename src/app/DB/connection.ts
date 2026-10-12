@@ -1,24 +1,28 @@
-import path from 'path';
-import { openDatabase, autoBackup } from './sqlite';
-import { isMySQLActive } from './mysql';
-import seedAdmin from './seedAdmin';
-import { ensureLicense } from '../modules/License/license.service';
+import mongoose from 'mongoose';
 import config from '../config';
+import seedAdmin from './seedAdmin';
+import seedDemo from './seedDemo';
+import { ensureLicense } from '../modules/License/license.service';
 
-let opened = false;
+let connecting: Promise<void> | null = null;
 
 export async function connectDB(): Promise<void> {
-  if (opened) return;
-  const dataDir = process.env.POS_DATA_DIR || path.join(process.cwd(), 'data');
-  const dbFile = path.join(dataDir, 'pos.db');
-  await openDatabase(dbFile);
-  await seedAdmin();
-  await ensureLicense();
-  autoBackup();
-  opened = true;
-  if (isMySQLActive()) {
-    console.log(`🗄️ Database Connected: MySQL ("${config.db_name}" on ${config.db_host})`);
-  } else {
-    console.log(`🗄️ Database Connected: SQLite local storage (${dbFile})`);
+  if (mongoose.connection.readyState === 1) return;
+  if (!connecting) {
+    connecting = (async () => {
+      if (!config.database_url) {
+        throw new Error('DATABASE_URL is not set');
+      }
+      await mongoose.connect(config.database_url);
+      await seedAdmin();
+      await seedDemo();
+      await ensureLicense();
+      const name = mongoose.connection.name || 'sheemah_pos';
+      console.log(`Database connected: MongoDB (${name})`);
+    })().catch((err) => {
+      connecting = null;
+      throw err;
+    });
   }
+  await connecting;
 }

@@ -1,12 +1,11 @@
 import httpStatus from 'http-status';
 import AppError from '../../errors/AppError';
-import { getDatabase, markDirty, runOp } from '../../DB/sqlite';
-import { isMySQLActive, deleteCollectionFromMySQL } from '../../DB/mysql';
+import { allCollections } from '../../DB/collection';
 import { User } from '../User/user.model';
 import { Settings } from './settings.model';
 import { ISettings } from './settings.interface';
 
-const DEMO_COLLECTIONS = [
+const DEMO_COLLECTIONS = new Set([
   'sales',
   'purchases',
   'customers',
@@ -20,9 +19,10 @@ const DEMO_COLLECTIONS = [
   'stockCorrections',
   'barcodeJobs',
   'productSuppliers',
-];
+]);
 
-// Get settings (upsert singleton)
+const KEEP_ON_DELETE_ALL = new Set(['settings', 'licenses']);
+
 const getSettings = async () => {
   let settings = await Settings.findOne();
   if (!settings) {
@@ -36,7 +36,6 @@ const getSettings = async () => {
   return settings;
 };
 
-// Update settings
 const updateSettings = async (payload: Partial<ISettings>) => {
   let settings = await Settings.findOne();
   if (!settings) {
@@ -54,21 +53,29 @@ const resetDemoData = async (userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Current user was not found');
   }
 
-  return runOp(async () => {
-    const db = getDatabase();
-    for (const name of DEMO_COLLECTIONS) {
-      db.run('DELETE FROM documents WHERE collection = ?', [name]);
-      if (isMySQLActive()) {
-        await deleteCollectionFromMySQL(name);
-      }
+  for (const collection of allCollections()) {
+    if (DEMO_COLLECTIONS.has(collection.name)) {
+      await collection.deleteMany({});
     }
-    db.run('DELETE FROM documents WHERE collection = ? AND id != ?', ['users', current._id]);
-    if (isMySQLActive()) {
-      await deleteCollectionFromMySQL('users', current._id);
-    }
-    markDirty();
-    return { keptUserId: userId };
-  });
+  }
+  await User.deleteMany({ _id: { $ne: current._id } });
+  return { keptUserId: userId };
 };
 
-export const SettingsService = { getSettings, updateSettings, resetDemoData };
+const deleteAllData = async (userId: string) => {
+  const current = await User.findOne({ userId });
+  if (!current?._id) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Current user was not found');
+  }
+
+  for (const collection of allCollections()) {
+    if (collection.name === 'users') {
+      await collection.deleteMany({ _id: { $ne: current._id } });
+    } else if (!KEEP_ON_DELETE_ALL.has(collection.name)) {
+      await collection.deleteMany({});
+    }
+  }
+  return { keptUserId: userId };
+};
+
+export const SettingsService = { getSettings, updateSettings, resetDemoData, deleteAllData };

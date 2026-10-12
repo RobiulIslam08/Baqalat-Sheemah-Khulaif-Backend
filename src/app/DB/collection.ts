@@ -1,8 +1,6 @@
 import crypto from 'crypto';
-import { getDatabase, markDirty, runOp } from './sqlite';
-import { isMySQLActive, saveRowToMySQL } from './mysql';
-
-export type DocMethods = Record<string, (this: Doc, ...args: never[]) => unknown>;
+import mongoose, { ClientSession, Model, Schema } from 'mongoose';
+import { currentSession } from './session';
 
 export interface CollectionOptions {
   softDelete?: boolean;
@@ -10,6 +8,72 @@ export interface CollectionOptions {
   refs?: Record<string, string>;
   methods?: Record<string, (this: Doc, ...args: any[]) => unknown>;
   beforeSave?: (data: Record<string, any>, previous: Record<string, any> | null) => Promise<void> | void;
+}
+
+const models = new Map<string, Model<any>>();
+
+export function getMongoModel(name: string): Model<any> {
+  const cached = models.get(name);
+  if (cached) return cached;
+  const existing = mongoose.models[name] as Model<any> | undefined;
+  if (existing) {
+    models.set(name, existing);
+    return existing;
+  }
+  const schema = new Schema(
+    { _id: { type: String } },
+    { strict: false, versionKey: false, id: false, collection: name },
+  );
+  const model = mongoose.model(name, schema, name);
+  models.set(name, model);
+  return model;
+}
+
+function sessionOptions(): { session?: ClientSession } {
+  const session = currentSession();
+  return session ? { session } : {};
+}
+
+function normalizeValue(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof RegExp) return value;
+  if (Array.isArray(value)) return value.map((item) => normalizeValue(item));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = normalizeValue(inner);
+    }
+    return out;
+  }
+  return value;
+}
+
+function mentions(filter: unknown, key: string): boolean {
+  if (!filter || typeof filter !== 'object') return false;
+  return JSON.stringify(filter).includes(`"${key}"`);
+}
+
+function parseSort(spec: unknown): Array<{ field: string; dir: 1 | -1 }> {
+  if (!spec) return [{ field: 'createdAt', dir: -1 }];
+  if (typeof spec === 'string') {
+    return spec
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => (part.startsWith('-') ? { field: part.slice(1), dir: -1 } : { field: part, dir: 1 }));
+  }
+  if (typeof spec === 'object') {
+    return Object.entries(spec as Record<string, unknown>).map(([field, dir]) => ({
+      field,
+      dir: Number(dir) >= 0 ? 1 : -1,
+    }));
+  }
+  return [{ field: 'createdAt', dir: -1 }];
+}
+
+function mongoSort(spec: unknown): Record<string, 1 | -1> {
+  const out: Record<string, 1 | -1> = {};
+  for (const rule of parseSort(spec)) out[rule.field] = rule.dir;
+  return out;
 }
 
 export class Doc {
@@ -35,7 +99,7 @@ export class Doc {
     return out;
   }
 
-  async save() {
+  async save(_options?: unknown) {
     const collection = registry.get(this.__collection);
     if (!collection) throw new Error(`Unknown collection ${this.__collection}`);
     return collection.saveDoc(this);
@@ -49,92 +113,6 @@ function plainFrom(doc: Doc): Record<string, any> {
     out[key] = value;
   }
   return out;
-}
-
-function looseEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a == null || b == null) return a == null && b == null;
-  if (typeof a === 'number' && typeof b === 'string' && b.trim() !== '') return a === Number(b);
-  if (typeof b === 'number' && typeof a === 'string' && a.trim() !== '') return Number(a) === b;
-  if (typeof a === 'boolean' || typeof b === 'boolean') return String(a) === String(b);
-  return false;
-}
-
-function toTime(value: unknown): number | null {
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-    const time = Date.parse(value);
-    return Number.isNaN(time) ? null : time;
-  }
-  return null;
-}
-
-function compareValues(a: unknown, b: unknown): number {
-  if (typeof a === 'number' && typeof b === 'number') return a - b;
-  const ta = toTime(a);
-  const tb = toTime(b);
-  if (ta != null && tb != null) return ta - tb;
-  return String(a ?? '').localeCompare(String(b ?? ''), undefined, { numeric: true });
-}
-
-function mentions(filter: unknown, key: string): boolean {
-  if (!filter || typeof filter !== 'object') return false;
-  return JSON.stringify(filter).includes(`"${key}"`);
-}
-
-function matches(doc: Record<string, any>, filter: any): boolean {
-  if (!filter || typeof filter !== 'object' || filter instanceof RegExp) return true;
-  for (const [key, cond] of Object.entries(filter)) {
-    if (key === '$or') {
-      if (!(cond as any[]).some((item) => matches(doc, item))) return false;
-      continue;
-    }
-    if (key === '$and') {
-      if (!(cond as any[]).every((item) => matches(doc, item))) return false;
-      continue;
-    }
-    const value = doc[key];
-    if (cond instanceof RegExp) {
-      if (!cond.test(String(value ?? ''))) return false;
-      continue;
-    }
-    if (cond && typeof cond === 'object' && !(cond instanceof Date) && !Array.isArray(cond)) {
-      const operator = cond as Record<string, any>;
-      if ('$ne' in operator && looseEqual(value, operator.$ne)) return false;
-      if ('$gte' in operator && compareValues(value, operator.$gte) < 0) return false;
-      if ('$gt' in operator && compareValues(value, operator.$gt) <= 0) return false;
-      if ('$lte' in operator && compareValues(value, operator.$lte) > 0) return false;
-      if ('$lt' in operator && compareValues(value, operator.$lt) >= 0) return false;
-      if ('$in' in operator && !(operator.$in as unknown[]).some((item) => looseEqual(value, item))) {
-        return false;
-      }
-      if ('$regex' in operator) {
-        const flags = String(operator.$options || '').includes('i') ? 'i' : '';
-        const regex = operator.$regex instanceof RegExp ? operator.$regex : new RegExp(String(operator.$regex), flags);
-        if (!regex.test(String(value ?? ''))) return false;
-      }
-      continue;
-    }
-    if (!looseEqual(value, cond)) return false;
-  }
-  return true;
-}
-
-function parseSort(spec: unknown): Array<{ field: string; dir: number }> {
-  if (!spec) return [{ field: 'createdAt', dir: -1 }];
-  if (typeof spec === 'string') {
-    return spec
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((part) => (part.startsWith('-') ? { field: part.slice(1), dir: -1 } : { field: part, dir: 1 }));
-  }
-  if (typeof spec === 'object') {
-    return Object.entries(spec as Record<string, unknown>).map(([field, dir]) => ({
-      field,
-      dir: Number(dir) >= 0 ? 1 : -1,
-    }));
-  }
-  return [{ field: 'createdAt', dir: -1 }];
 }
 
 export class Query {
@@ -214,42 +192,46 @@ export class Query {
   }
 
   async exec(): Promise<any> {
-    return runOp(async () => this.execSync());
-  }
-
-  execSync(): any {
-    const filter = this.getFilter();
-    let rows = this.collection.readAll().filter((row) => {
-      if (this.collection.softDelete && row.isDeleted === true && !mentions(filter, 'isDeleted')) return false;
-      return matches(row, filter);
+    const filter = this.collection.applySoftDelete(this.getFilter());
+    let cursor = this.collection.mongo().find(filter).sort(mongoSort(this.sortSpec)).collation({
+      locale: 'en',
+      numericOrdering: true,
     });
-
-    const sort = parseSort(this.sortSpec);
-    rows.sort((a, b) => {
-      for (const rule of sort) {
-        const diff = compareValues(a[rule.field], b[rule.field]) * rule.dir;
-        if (diff !== 0) return diff;
-      }
-      return 0;
-    });
-
+    const session = currentSession();
+    if (session) cursor = cursor.session(session);
     if (!this.single) {
-      if (this.skipCount) rows = rows.slice(this.skipCount);
-      if (this.limitCount != null) rows = rows.slice(0, this.limitCount);
+      if (this.skipCount) cursor = cursor.skip(this.skipCount);
+      if (this.limitCount != null) cursor = cursor.limit(this.limitCount);
     } else {
-      rows = rows.slice(0, 1);
+      cursor = cursor.limit(1);
     }
 
-    let docs = rows.map((row) => this.hydrate(row));
+    const rows = await cursor.lean();
+    let docs = rows.map((row) => this.hydrate(row as Record<string, any>));
+
     for (const field of this.populateFields) {
       const targetName = this.collection.refs[field];
       const target = targetName ? registry.get(targetName) : undefined;
+      if (!target) continue;
+      const ids = [
+        ...new Set(
+          docs
+            .map((doc) => doc[field])
+            .filter((id): id is string => typeof id === 'string' && id.length > 0),
+        ),
+      ];
+      const relatedRows = ids.length
+        ? await target
+            .mongo()
+            .find({ _id: { $in: ids }, isDeleted: { $ne: true } })
+            .lean()
+        : [];
+      const byId = new Map(
+        relatedRows.map((row) => [String((row as { _id?: string })._id), this.presentRelated(row as Record<string, any>, target)]),
+      );
       docs = docs.map((doc) => {
         const id = doc[field];
-        if (target && typeof id === 'string') {
-          const related = target.readAll().find((item) => item._id === id && item.isDeleted !== true) ?? null;
-          doc[field] = related ? this.presentRelated(related, target) : null;
-        }
+        if (typeof id === 'string') doc[field] = byId.get(id) ?? null;
         return doc;
       });
     }
@@ -312,6 +294,19 @@ export class Collection {
     registry.set(name, this);
   }
 
+  mongo() {
+    return getMongoModel(this.name);
+  }
+
+  applySoftDelete(filter: any) {
+    const normalized = (normalizeValue(filter && typeof filter === 'object' ? filter : {}) ?? {}) as Record<string, unknown>;
+    if (this.softDelete && !mentions(normalized, 'isDeleted')) {
+      if (Object.keys(normalized).length === 0) return { isDeleted: { $ne: true } };
+      return { $and: [normalized, { isDeleted: { $ne: true } }] };
+    }
+    return normalized;
+  }
+
   find(filter?: any, projection?: string) {
     const query = new Query(this, filter, false);
     if (typeof projection === 'string') query.projection = projection;
@@ -329,23 +324,25 @@ export class Collection {
   create(payload: any[], options?: { session?: unknown }): Promise<Doc[]>;
   create(payload: Record<string, any>, options?: { session?: unknown }): Promise<Doc>;
   async create(payload: any, _options?: { session?: unknown }): Promise<any> {
-    return runOp(async () => {
-      if (Array.isArray(payload)) {
-        const created = [];
-        for (const item of payload) created.push(await this.insertSync(item));
-        return created;
-      }
-      return this.insertSync(payload);
-    });
+    if (Array.isArray(payload)) {
+      const created = [];
+      for (const item of payload) created.push(await this.insert(item));
+      return created;
+    }
+    return this.insert(payload);
   }
 
   async countDocuments(filter: any = {}) {
-    return runOp(async () => {
-      return this.readAll().filter((row) => {
-        if (this.softDelete && row.isDeleted === true && !mentions(filter, 'isDeleted')) return false;
-        return matches(row, filter);
-      }).length;
-    });
+    const mongoFilter = this.applySoftDelete(filter);
+    let query = this.mongo().countDocuments(mongoFilter);
+    const session = currentSession();
+    if (session) query = query.session(session);
+    return query;
+  }
+
+  async deleteMany(filter: any = {}) {
+    const normalized = (normalizeValue(filter && typeof filter === 'object' ? filter : {}) ?? {}) as Record<string, unknown>;
+    await this.mongo().deleteMany(normalized, sessionOptions());
   }
 
   async findByIdAndUpdate(id: string, update: any, _options?: unknown) {
@@ -353,40 +350,24 @@ export class Collection {
   }
 
   async findOneAndUpdate(filter: any, update: any, _options?: unknown) {
-    return runOp(async () => {
-      const query = new Query(this, filter, true);
-      query.includeHidden = true;
-      const existing = query.execSync();
-      if (!existing) return null;
-      const patch = update?.$set ?? update ?? {};
-      for (const [key, value] of Object.entries(patch)) {
-        if (!key.startsWith('$')) existing[key] = value;
-      }
-      await this.writeDoc(existing);
-      return existing;
-    });
+    const query = new Query(this, filter, true);
+    query.includeHidden = true;
+    const existing = await query.exec();
+    if (!existing) return null;
+    const patch = update?.$set ?? update ?? {};
+    for (const [key, value] of Object.entries(patch)) {
+      if (!key.startsWith('$')) existing[key] = value;
+    }
+    await this.writeDoc(existing);
+    return existing;
   }
 
   async saveDoc(doc: Doc) {
-    return runOp(async () => {
-      await this.writeDoc(doc);
-      return doc;
-    });
+    await this.writeDoc(doc);
+    return doc;
   }
 
-  readAll(): Record<string, any>[] {
-    const statement = getDatabase().prepare('SELECT body FROM documents WHERE collection = ?');
-    const rows: Record<string, any>[] = [];
-    statement.bind([this.name]);
-    while (statement.step()) {
-      const record = statement.getAsObject() as { body?: string };
-      if (record.body) rows.push(JSON.parse(record.body));
-    }
-    statement.free();
-    return rows;
-  }
-
-  private async insertSync(payload: Record<string, any>) {
+  private async insert(payload: Record<string, any>) {
     const data: Record<string, any> = { ...payload };
     data._id = data._id || crypto.randomBytes(12).toString('hex');
     const now = new Date().toISOString();
@@ -394,13 +375,16 @@ export class Collection {
     data.updatedAt = now;
     if (this.softDelete && data.isDeleted === undefined) data.isDeleted = false;
     if (this.beforeSave) await this.beforeSave(data, null);
-    this.writeRow(data._id, data);
+    await this.mongo().replaceOne({ _id: data._id }, data, { upsert: true, ...sessionOptions() });
     return new Doc(this.name, data, this.methods);
   }
 
   private async writeDoc(doc: Doc) {
     const data = plainFrom(doc);
-    const previous = this.readAll().find((row) => row._id === data._id) ?? null;
+    let previousQuery = this.mongo().findOne({ _id: data._id });
+    const session = currentSession();
+    if (session) previousQuery = previousQuery.session(session);
+    const previous = (await previousQuery.lean()) as Record<string, any> | null;
     if (previous) {
       for (const field of this.hidden) {
         if (data[field] === undefined && previous[field] !== undefined) {
@@ -412,19 +396,7 @@ export class Collection {
     data.updatedAt = new Date().toISOString();
     if (this.beforeSave) await this.beforeSave(data, previous);
     Object.assign(doc, data);
-    this.writeRow(data._id, data);
-  }
-
-  private writeRow(id: string, data: Record<string, any>) {
-    const bodyStr = JSON.stringify(data);
-    getDatabase().run(
-      'INSERT OR REPLACE INTO documents (collection, id, body) VALUES (?, ?, ?)',
-      [this.name, id, bodyStr],
-    );
-    markDirty();
-    if (isMySQLActive()) {
-      void saveRowToMySQL(this.name, id, bodyStr);
-    }
+    await this.mongo().replaceOne({ _id: data._id }, data, { upsert: true, ...sessionOptions() });
   }
 }
 
@@ -432,4 +404,26 @@ const registry = new Map<string, Collection>();
 
 export function createCollection(name: string, options?: CollectionOptions) {
   return new Collection(name, options);
+}
+
+export function allCollections(): Collection[] {
+  return [...registry.values()];
+}
+
+export async function exportCollections(): Promise<Record<string, unknown[]>> {
+  const out: Record<string, unknown[]> = {};
+  for (const collection of registry.values()) {
+    out[collection.name] = await collection.mongo().find({}).lean();
+  }
+  return out;
+}
+
+export async function replaceCollections(data: Record<string, unknown[]>): Promise<void> {
+  const names = new Set([...registry.keys(), ...Object.keys(data)]);
+  for (const name of names) {
+    const rows = Array.isArray(data[name]) ? data[name] : [];
+    const model = getMongoModel(name);
+    await model.deleteMany({});
+    if (rows.length) await model.insertMany(rows);
+  }
 }

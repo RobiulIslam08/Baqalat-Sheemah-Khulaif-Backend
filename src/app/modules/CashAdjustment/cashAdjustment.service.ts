@@ -3,7 +3,7 @@ import { CashAdjustment } from './cashAdjustment.model';
 import { ICashAdjustment } from './cashAdjustment.interface';
 import AppError from '../../errors/AppError';
 import QueryBuilder from '../../utils/QueryBuilder';
-import { startSession } from '../../DB/sqlite';
+import { startSession } from '../../DB/session';
 
 const postAdjustment = async (payload: ICashAdjustment, userId: string) => {
   payload.createdBy = userId;

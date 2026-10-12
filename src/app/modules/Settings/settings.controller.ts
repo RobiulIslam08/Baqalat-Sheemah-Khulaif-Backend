@@ -18,4 +18,9 @@ const resetDemo = catchAsync(async (req, res) => {
   sendResponse(res, { statusCode: httpStatus.OK, success: true, message: 'Demo data cleared', data: result });
 });
 
-export const SettingsController = { getSettings, updateSettings, resetDemo };
+const deleteAll = catchAsync(async (req, res) => {
+  const result = await SettingsService.deleteAllData(req.user.userId);
+  sendResponse(res, { statusCode: httpStatus.OK, success: true, message: 'All business data deleted', data: result });
+});
+
+export const SettingsController = { getSettings, updateSettings, resetDemo, deleteAll };

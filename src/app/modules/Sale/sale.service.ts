@@ -1,5 +1,5 @@
 import httpStatus from 'http-status';
-import { startSession } from '../../DB/sqlite';
+import { startSession } from '../../DB/session';
 import { Sale } from './sale.model';
 import { ISale, ISaleItem } from './sale.interface';
 import AppError from '../../errors/AppError';
