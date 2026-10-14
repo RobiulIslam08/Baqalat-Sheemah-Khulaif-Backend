@@ -33,6 +33,22 @@ const createProduct = async (payload: IProduct) => {
   return result;
 };
 
+// Compute the next serial product ID (plain number as string, e.g. "1", "2", "3"...)
+const getNextProductId = async () => {
+  const products = await Product.find(
+    { isDeleted: { $in: [true, false] } },
+    'productId',
+  ).lean();
+
+  let max = 0;
+  for (const doc of products as any[]) {
+    const n = parseInt(String(doc.productId).replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+
+  return String(max + 1);
+};
+
 // Get all products with search/filter/pagination
 const getAllProducts = async (query: Record<string, unknown>) => {
   const productQuery = new QueryBuilder(Product.find(), query)
@@ -97,4 +113,5 @@ export const ProductService = {
   getProductById,
   updateProduct,
   deleteProduct,
+  getNextProductId,
 };

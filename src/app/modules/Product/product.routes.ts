@@ -20,6 +20,12 @@ router.get(
 );
 
 router.get(
+  '/next-id',
+  auth('admin', 'manager'),
+  ProductController.getNextProductId,
+);
+
+router.get(
   '/:id',
   auth('admin', 'manager', 'cashier'),
   ProductController.getProductById,

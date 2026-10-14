@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import config from '../config';
 import seedAdmin from './seedAdmin';
 import seedDemo from './seedDemo';
+import normalizeProductIds from './normalizeProductIds';
 import { ensureLicense } from '../modules/License/license.service';
 
 let connecting: Promise<void> | null = null;
@@ -16,6 +17,7 @@ export async function connectDB(): Promise<void> {
       await mongoose.connect(config.database_url);
       await seedAdmin();
       await seedDemo();
+      await normalizeProductIds();
       await ensureLicense();
       const name = mongoose.connection.name || 'sheemah_pos';
       console.log(`Database connected: MongoDB (${name})`);

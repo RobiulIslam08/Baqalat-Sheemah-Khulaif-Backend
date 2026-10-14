@@ -14,6 +14,17 @@ const createProduct = catchAsync(async (req, res) => {
   });
 });
 
+const getNextProductId = catchAsync(async (req, res) => {
+  const nextProductId = await ProductService.getNextProductId();
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Next product ID generated successfully',
+    data: { nextProductId },
+  });
+});
+
 const getAllProducts = catchAsync(async (req, res) => {
   const result = await ProductService.getAllProducts(req.query);
 
@@ -65,4 +76,5 @@ export const ProductController = {
   getProductById,
   updateProduct,
   deleteProduct,
+  getNextProductId,
 };
