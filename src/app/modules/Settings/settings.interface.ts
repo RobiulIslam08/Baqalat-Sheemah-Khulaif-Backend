@@ -1,5 +1,7 @@
 export interface ISettings {
   storeName: string;
+  storeNameAr?: string;
+  storeNameEn?: string;
   vatNumber: string;
   invoicePrefix: string;
   defaultPayment: string;

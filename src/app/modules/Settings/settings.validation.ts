@@ -3,6 +3,8 @@ import { z } from 'zod';
 const updateSettingsValidationSchema = z.object({
   body: z.object({
     storeName: z.string().trim().optional(),
+    storeNameAr: z.string().trim().optional(),
+    storeNameEn: z.string().trim().optional(),
     vatNumber: z.string().trim().optional(),
     invoicePrefix: z.string().trim().optional(),
     defaultPayment: z.string().trim().optional(),
