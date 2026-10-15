@@ -108,9 +108,6 @@ const deleteProduct = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Product not found');
   }
 
-  if (Number(product.quantity) > 0) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Product still has stock and cannot be deleted');
-  }
   product.isDeleted = true;
   await product.save();
   return product;
