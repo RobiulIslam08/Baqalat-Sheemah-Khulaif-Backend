@@ -23,7 +23,7 @@ const updateSettingsValidationSchema = z.object({
     crNumber: z.string().trim().optional(),
     logo: z
       .string()
-      .max(400_000)
+      .max(1_200_000)
       .refine(
         (value) => value === '' || /^data:image\/(png|jpeg|webp);base64,/.test(value),
         'Logo must be a PNG, JPEG, or WebP image',
