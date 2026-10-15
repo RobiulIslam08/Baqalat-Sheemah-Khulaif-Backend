@@ -74,11 +74,20 @@ const getProductById = async (id: string) => {
 
 // Update product
 const updateProduct = async (id: string, payload: Partial<IProduct>) => {
-  // Prevent updating immutable fields
+  // Product ID stays the auto serial. Code and quantity can be corrected here.
   delete payload.productId;
-  delete payload.productCode;
   delete payload.isDeleted;
-  delete payload.quantity;
+
+  if (payload.productCode) {
+    const duplicate = await Product.findOne({
+      productCode: payload.productCode,
+      _id: { $ne: id },
+      isDeleted: { $in: [true, false] },
+    });
+    if (duplicate) {
+      throw new AppError(httpStatus.CONFLICT, 'Product with this code or ID already exists');
+    }
+  }
 
   const product = await Product.findByIdAndUpdate(id, payload, {
     new: true,

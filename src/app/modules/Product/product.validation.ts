@@ -30,6 +30,7 @@ const createProductValidationSchema = z.object({
 
 const updateProductValidationSchema = z.object({
   body: z.object({
+    productCode: z.string().trim().min(1).optional(),
     productName: z.string().trim().optional(),
     arabicName: z.string().trim().optional(),
     quantity: z.number().min(0).optional(),
