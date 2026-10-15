@@ -21,6 +21,14 @@ const updateSettingsValidationSchema = z.object({
     receiptFooter: z.string().trim().optional(),
     storeAddress: z.string().trim().optional(),
     crNumber: z.string().trim().optional(),
+    logo: z
+      .string()
+      .max(400_000)
+      .refine(
+        (value) => value === '' || /^data:image\/(png|jpeg|webp);base64,/.test(value),
+        'Logo must be a PNG, JPEG, or WebP image',
+      )
+      .optional(),
   }),
 });
 

@@ -6,44 +6,25 @@ import cookieParser from 'cookie-parser';
 import router from './app/routes';
 import globalErrorHandler from './app/middleware/globalErrorHandler';
 import notFound from './app/middleware/notFound';
-import config from './app/config';
 import { connectDB } from './app/DB/connection';
 
 const app: Application = express();
 
-// Parsers
-app.use(express.json());
-app.use(cookieParser());
-const desktop = process.env.POS_DESKTOP === '1';
-const port = process.env.PORT || '47211';
-const origins = desktop
-  ? [`http://127.0.0.1:${port}`, `http://localhost:${port}`]
-  : [
-      config.frontend_url as string,
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://localhost:6100',
-      'http://localhost:6200',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:6100',
-      'http://127.0.0.1:6200',
-    ].filter(Boolean);
-
+// CORS must run before other middleware so browser preflight (OPTIONS)
+// always receives Access-Control-Allow-Origin. Reflect the calling origin
+// because credentialed requests cannot use a wildcard.
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, or same-origin)
-      if (!origin) return callback(null, true);
-      if (origins.includes(origin) || origin.endsWith('.loca.lt') || origin.endsWith('.ngrok.io')) {
-        return callback(null, true);
-      }
-      // For localhost or cPanel deployments
-      return callback(null, true);
+    origin: (requestOrigin, callback) => {
+      callback(null, requestOrigin || true);
     },
     credentials: true,
   }),
 );
+
+// Parsers
+app.use(express.json({ limit: '2mb' }));
+app.use(cookieParser());
 
 // Ensure MongoDB is connected before processing any request (critical for Vercel serverless)
 app.use(async (req: Request, res: Response, next: NextFunction) => {

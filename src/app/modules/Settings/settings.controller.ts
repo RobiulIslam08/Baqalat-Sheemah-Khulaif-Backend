@@ -8,6 +8,11 @@ const getSettings = catchAsync(async (req, res) => {
   sendResponse(res, { statusCode: httpStatus.OK, success: true, message: 'Settings retrieved', data: result });
 });
 
+const getBranding = catchAsync(async (req, res) => {
+  const result = await SettingsService.getBranding();
+  sendResponse(res, { statusCode: httpStatus.OK, success: true, message: 'Branding retrieved', data: result });
+});
+
 const updateSettings = catchAsync(async (req, res) => {
   const result = await SettingsService.updateSettings(req.body);
   sendResponse(res, { statusCode: httpStatus.OK, success: true, message: 'Settings updated', data: result });
@@ -23,4 +28,4 @@ const deleteAll = catchAsync(async (req, res) => {
   sendResponse(res, { statusCode: httpStatus.OK, success: true, message: 'All business data deleted', data: result });
 });
 
-export const SettingsController = { getSettings, updateSettings, resetDemo, deleteAll };
+export const SettingsController = { getSettings, getBranding, updateSettings, resetDemo, deleteAll };

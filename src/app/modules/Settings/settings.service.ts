@@ -36,6 +36,14 @@ const getSettings = async () => {
   return settings;
 };
 
+const getBranding = async () => {
+  const settings = await getSettings();
+  return {
+    storeName: settings.storeName || '',
+    logo: settings.logo || '',
+  };
+};
+
 const updateSettings = async (payload: Partial<ISettings>) => {
   let settings = await Settings.findOne();
   if (!settings) {
@@ -78,4 +86,4 @@ const deleteAllData = async (userId: string) => {
   return { keptUserId: userId };
 };
 
-export const SettingsService = { getSettings, updateSettings, resetDemoData, deleteAllData };
+export const SettingsService = { getSettings, getBranding, updateSettings, resetDemoData, deleteAllData };

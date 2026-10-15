@@ -18,6 +18,7 @@ export interface ISettings {
   receiptFooter?: string;
   storeAddress?: string;
   crNumber?: string;
+  logo?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
