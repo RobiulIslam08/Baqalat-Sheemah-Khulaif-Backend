@@ -274,6 +274,19 @@ export class ZatcaOnboardingService {
   public async fullAutomatedOnboard(payload: any): Promise<IZatcaConfig> {
     let config = await ZatcaConfig.findOne({ branchId: payload.branchId });
 
+    // Protect active production onboarding: if already onboarded and not explicitly forced, preserve it!
+    if (config && config.status === 'onboarded' && config.productionCsid && !payload.forceReonboard) {
+      if (payload.deviceName) config.deviceName = payload.deviceName;
+      if (payload.taxpayerName) config.taxpayerName = payload.taxpayerName;
+      if (payload.streetName) config.streetName = payload.streetName;
+      if (payload.buildingNumber) config.buildingNumber = payload.buildingNumber;
+      if (payload.cityName) config.cityName = payload.cityName;
+      if (payload.postalCode) config.postalCode = payload.postalCode;
+      if (payload.crn) config.crn = payload.crn;
+      await config.save();
+      return config;
+    }
+
     // Sanitize businessCategory so it never contains forbidden characters like '&'
     if (payload.businessCategory) {
       payload.businessCategory = payload.businessCategory.replace(/&/g, 'and').replace(/[^a-zA-Z0-9\u0600-\u06FF\s-_]/g, '').trim();
@@ -281,38 +294,31 @@ export class ZatcaOnboardingService {
       payload.businessCategory = 'Food and Beverage';
     }
 
-    // Always generate fresh EC Key pair and reset stale compliance tokens if not onboarded yet
-    let privateKey = config?.privateKey;
-    let publicKey = config?.publicKey;
-    if (!config || config.status !== 'onboarded' || !privateKey || !publicKey) {
-      const keys = ZatcaCryptoHelper.generateEcKeyPair();
-      privateKey = keys.privateKey;
-      publicKey = keys.publicKey;
-      if (config) {
-        config.csrContent = undefined;
-        config.complianceCsid = undefined;
-        config.complianceSecret = undefined;
-        config.complianceRequestId = undefined;
-      }
-    }
-
-    const serialNumber =
-      (config?.status === 'onboarded' && config?.serialNumber) ||
-      `1-POS|2-${payload.branchId || 'MAIN'}|3-${randomUUID().substring(0, 18)}`;
+    // Always generate a fresh EC Key pair and fresh serial number for any new onboarding
+    const keys = ZatcaCryptoHelper.generateEcKeyPair();
+    const privateKey = keys.privateKey;
+    const publicKey = keys.publicKey;
+    const serialNumber = `1-POS|2-${payload.branchId || 'MAIN'}|3-${randomUUID().substring(0, 18)}`;
 
     if (!config) {
       config = new ZatcaConfig({
         ...payload,
-        privateKey: privateKey!,
-        publicKey: publicKey!,
+        privateKey,
+        publicKey,
         serialNumber,
+        status: 'pending',
       });
       await config.save();
     } else {
       Object.assign(config, payload);
-      config.privateKey = privateKey!;
-      config.publicKey = publicKey!;
+      config.privateKey = privateKey;
+      config.publicKey = publicKey;
       config.serialNumber = serialNumber;
+      config.csrContent = undefined;
+      config.complianceCsid = undefined;
+      config.complianceSecret = undefined;
+      config.complianceRequestId = undefined;
+      config.status = 'pending';
       await config.save();
     }
 
