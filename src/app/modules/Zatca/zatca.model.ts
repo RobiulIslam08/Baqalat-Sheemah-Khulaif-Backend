@@ -9,7 +9,7 @@ const ZatcaConfigSchema = new Schema<IZatcaConfig>(
     vatNumber: { type: String, required: true },
     taxpayerName: { type: String, required: true },
     branchName: { type: String },
-    businessCategory: { type: String, default: 'Food & Beverage' },
+    businessCategory: { type: String, default: 'Food and Beverage' },
     crn: { type: String },
 
     streetName: { type: String, required: true },

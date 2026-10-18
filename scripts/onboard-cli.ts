@@ -69,7 +69,7 @@ async function runCli() {
       vatNumber: '311111111111113',
       taxpayerName: 'بقالة شيمه خليف عايد العنزي للمواد الغذائية',
       branchName: 'Main Branch',
-      businessCategory: 'Food & Beverage',
+      businessCategory: 'Food and Beverage',
       crn: '1010101010',
       streetName: 'خميس مشيط - مخطط الحسام',
       buildingNumber: '1234',

@@ -93,6 +93,19 @@ function encodeRdn(oid: string, tag: number, value: string): Buffer {
   return tlv(ASN1.SET, typeAndValue);
 }
 
+/**
+ * Sanitize industry/businessCategory for ZATCA CSR.
+ * ZATCA strictly forbids special characters like ampersand ('&') and '<' or '>'.
+ * Must contain only alphanumeric and space/hyphen/underscore.
+ */
+export function sanitizeZatcaIndustry(val?: string): string {
+  if (!val) return 'Food and Beverage';
+  let clean = String(val).replace(/&/g, 'and');
+  clean = clean.replace(/[^a-zA-Z0-9\u0600-\u06FF\s-_]/g, '').trim();
+  clean = clean.replace(/\s+/g, ' ');
+  return clean || 'Food and Beverage';
+}
+
 export class ZatcaCryptoHelper {
   /**
    * Find available OpenSSL CLI binary across Windows and Linux.
@@ -171,9 +184,10 @@ export class ZatcaCryptoHelper {
   ): string {
     const templateName = environment === 'sandbox' ? 'PREZATCA-Code-Signing' : 'ZATCA-Code-Signing';
     const invoiceTypeFlag = attributes.invoiceTypeFlag || '1100';
-    const branchName = attributes.branchName || attributes.taxpayerName;
-    const registeredAddress = `${attributes.buildingNumber} ${attributes.streetName}`;
-    const businessCategory = attributes.businessCategory || 'Food & Beverage';
+    const branchName = (attributes.branchName || attributes.taxpayerName || 'Main Branch').replace(/[<>]/g, '').trim();
+    const taxpayerName = (attributes.taxpayerName || 'Taxpayer').replace(/[<>]/g, '').trim();
+    const registeredAddress = `${attributes.buildingNumber || '1234'} ${attributes.streetName || 'Main St'}`.replace(/[<>]/g, '').trim();
+    const businessCategory = sanitizeZatcaIndustry(attributes.businessCategory);
 
     // 1. Version: INTEGER 0
     const version = tlv(ASN1.INTEGER, Buffer.from([0x00]));
@@ -250,9 +264,10 @@ export class ZatcaCryptoHelper {
   ): string {
     const templateName = environment === 'sandbox' ? 'PREZATCA-Code-Signing' : 'ZATCA-Code-Signing';
     const invoiceTypeFlag = attributes.invoiceTypeFlag || '1100';
-    const branchName = attributes.branchName || attributes.taxpayerName;
-    const registeredAddress = `${attributes.buildingNumber} ${attributes.streetName}`;
-    const businessCategory = attributes.businessCategory || 'Food & Beverage';
+    const branchName = (attributes.branchName || attributes.taxpayerName || 'Main Branch').replace(/[<>]/g, '').trim();
+    const taxpayerName = (attributes.taxpayerName || 'Taxpayer').replace(/[<>]/g, '').trim();
+    const registeredAddress = `${attributes.buildingNumber || '1234'} ${attributes.streetName || 'Main St'}`.replace(/[<>]/g, '').trim();
+    const businessCategory = sanitizeZatcaIndustry(attributes.businessCategory);
 
     const tempDir = os.tmpdir();
     const uniqueId = `zatca_csr_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;

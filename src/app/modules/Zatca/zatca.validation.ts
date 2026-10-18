@@ -12,7 +12,7 @@ export const onboardDeviceValidationSchema = z.object({
       .regex(/^3.*3$/, 'Saudi VAT number must start and end with digit 3'),
     taxpayerName: z.string().trim(),
     branchName: z.string().trim().optional(),
-    businessCategory: z.string().trim().optional().default('Food & Beverage'),
+    businessCategory: z.string().trim().optional().default('Food and Beverage'),
     crn: z.string().trim().optional(),
     streetName: z.string().trim(),
     buildingNumber: z.string().trim(),
