@@ -100,6 +100,49 @@ const createSale = async (payload: ISale, userId: string) => {
 
     const [result] = await Sale.create([payload], { session });
     await session.commitTransaction();
+
+    // Auto ZATCA Phase 2 Processing (if branch is onboarded)
+    try {
+      const { ZatcaConfig } = await import('../Zatca/zatca.model');
+      const { ZatcaServices } = await import('../Zatca/zatca.service');
+      const activeConfig = await ZatcaConfig.findOne({ status: 'onboarded' });
+      if (activeConfig) {
+        const vatRate = Number(payload.vatPercent) || 15;
+        const totalVat = inclusiveVat(result.netAmount, vatRate);
+        const totalExcl = roundMoney(result.netAmount - totalVat);
+
+        const zatcaInv = await ZatcaServices.processInvoice({
+          branchId: activeConfig.branchId,
+          saleId: String(result._id),
+          invoiceNumber: `INV-${result.billNo}`,
+          invoiceType: 'simplified',
+          items: result.items.map((it: any) => ({
+            name: it.productName,
+            quantity: Number(it.quantity) || 1,
+            unitPrice: Number(it.price) || 0,
+            discount: 0,
+            vatRate,
+            vatCategory: 'S',
+            unitCode: it.type === 'BOX' ? 'BOX' : 'PCE',
+          })),
+          totalExclusiveVat: totalExcl,
+          totalVatAmount: totalVat,
+          totalInclusiveVat: result.netAmount,
+        });
+
+        if (zatcaInv?.qrCodePayload) {
+          result.qrCodePayload = zatcaInv.qrCodePayload;
+          result.zatcaStatus = zatcaInv.zatcaStatus;
+          await Sale.findByIdAndUpdate(result._id, {
+            qrCodePayload: zatcaInv.qrCodePayload,
+            zatcaStatus: zatcaInv.zatcaStatus,
+          });
+        }
+      }
+    } catch (zatcaErr) {
+      console.warn('ZATCA automatic processing skipped or failed:', (zatcaErr as any)?.message || zatcaErr);
+    }
+
     return result;
   } catch (error) {
     await session.abortTransaction();
@@ -140,6 +183,32 @@ const getSaleByBillNo = async (billNo: number) => {
   if (!sale) {
     throw new AppError(httpStatus.NOT_FOUND, 'Sale not found');
   }
+
+  // Ensure Phase 2 QR payload is attached from ZatcaInvoice if available
+  if (!sale.qrCodePayload) {
+    try {
+      const { ZatcaInvoice } = await import('../Zatca/zatca.model');
+      const zatcaInv = await ZatcaInvoice.findOne({
+        $or: [
+          { saleId: String(sale._id) },
+          { invoiceNumber: `INV-${billNo}` },
+          { invoiceNumber: `CN-${billNo}` },
+        ],
+      }).lean();
+
+      if (zatcaInv?.qrCodePayload) {
+        sale.qrCodePayload = zatcaInv.qrCodePayload;
+        sale.zatcaStatus = zatcaInv.zatcaStatus;
+        void Sale.findByIdAndUpdate(sale._id, {
+          qrCodePayload: zatcaInv.qrCodePayload,
+          zatcaStatus: zatcaInv.zatcaStatus,
+        });
+      }
+    } catch {
+      // ignore lookup error
+    }
+  }
+
   return sale;
 };
 
@@ -248,6 +317,51 @@ const createSalesReturn = async (payload: ISale, userId: string) => {
 
     const [result] = await Sale.create([payload], { session });
     await session.commitTransaction();
+
+    // Auto ZATCA Phase 2 Processing for Sales Return (Credit Note 381)
+    try {
+      const { ZatcaConfig } = await import('../Zatca/zatca.model');
+      const { ZatcaServices } = await import('../Zatca/zatca.service');
+      const activeConfig = await ZatcaConfig.findOne({ status: 'onboarded' });
+      if (activeConfig) {
+        const vatRate = Number(original?.vatPercent ?? payload.vatPercent) || 15;
+        const totalVat = inclusiveVat(result.netAmount, vatRate);
+        const totalExcl = roundMoney(result.netAmount - totalVat);
+
+        const zatcaInv = await ZatcaServices.processInvoice({
+          branchId: activeConfig.branchId,
+          saleId: String(result._id),
+          invoiceNumber: `CN-${result.billNo}`,
+          invoiceType: 'simplified',
+          transactionType: 'credit_note_381',
+          billingReferenceId: payload.returnReference ? `INV-${payload.returnReference}` : undefined,
+          items: result.items.map((it: any) => ({
+            name: it.productName,
+            quantity: Number(it.quantity) || 1,
+            unitPrice: Number(it.price) || 0,
+            discount: 0,
+            vatRate,
+            vatCategory: 'S',
+            unitCode: it.type === 'BOX' ? 'BOX' : 'PCE',
+          })),
+          totalExclusiveVat: totalExcl,
+          totalVatAmount: totalVat,
+          totalInclusiveVat: result.netAmount,
+        });
+
+        if (zatcaInv?.qrCodePayload) {
+          result.qrCodePayload = zatcaInv.qrCodePayload;
+          result.zatcaStatus = zatcaInv.zatcaStatus;
+          await Sale.findByIdAndUpdate(result._id, {
+            qrCodePayload: zatcaInv.qrCodePayload,
+            zatcaStatus: zatcaInv.zatcaStatus,
+          });
+        }
+      }
+    } catch (zatcaErr) {
+      console.warn('ZATCA credit note automatic processing skipped or failed:', (zatcaErr as any)?.message || zatcaErr);
+    }
+
     return result;
   } catch (error) {
     await session.abortTransaction();

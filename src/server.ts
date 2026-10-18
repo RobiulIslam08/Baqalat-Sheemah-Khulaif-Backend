@@ -10,6 +10,14 @@ async function main() {
     app.listen(port, () => {
       console.log(`Baqalat Sheemah Khulaif Aayed POS listening on port ${port}`);
     });
+
+    // Start background auto-sync worker for ZATCA offline/pending invoice reporting
+    try {
+      const { startZatcaSyncWorker } = await import('./app/modules/Zatca/services/zatcaSyncWorker.service');
+      startZatcaSyncWorker(10); // run every 10 minutes
+    } catch (workerErr) {
+      console.warn('Failed to start ZATCA sync worker:', workerErr);
+    }
   } catch (err) {
     console.log(err);
     process.exit(1);

@@ -26,6 +26,8 @@ export interface ISale {
   createdBy: string;
   isReturn: boolean;
   returnReference?: number; // billNo of original sale for returns
+  qrCodePayload?: string; // Phase 2 TLV Base64 QR Code
+  zatcaStatus?: string; // 'cleared' | 'reported' | 'pending' | 'failed'
   createdAt?: Date;
   updatedAt?: Date;
 }

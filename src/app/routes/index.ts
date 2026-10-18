@@ -19,6 +19,7 @@ import { SettingsRoutes } from '../modules/Settings/settings.routes';
 import { TicketRoutes } from '../modules/Ticket/ticket.routes';
 import { BackupRoutes } from '../modules/Backup/backup.routes';
 import { LicenseRoutes } from '../modules/License/license.routes';
+import { ZatcaRoutes } from '../modules/Zatca/zatca.routes';
 
 const router = express.Router();
 
@@ -42,6 +43,7 @@ const moduleRoutes = [
   { path: '/tickets', route: TicketRoutes },
   { path: '/backup', route: BackupRoutes },
   { path: '/license', route: LicenseRoutes },
+  { path: '/zatca', route: ZatcaRoutes },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

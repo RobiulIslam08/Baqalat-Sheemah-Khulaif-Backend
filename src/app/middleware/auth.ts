@@ -10,8 +10,10 @@ import { assertShopOpen, assertCanModify } from '../modules/License/license.serv
 
 const auth = (...requiredRoles: TUserRole[]) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const token = req.headers.authorization;
-    // ... rest of the code commented out or ignored
+    let token = req.headers.authorization;
+    if (!token && req.query.token && typeof req.query.token === 'string') {
+      token = req.query.token.startsWith('Bearer ') ? req.query.token : `Bearer ${req.query.token}`;
+    }
 
     // Check if token exists and has Bearer prefix
     if (!token || !token.startsWith('Bearer ')) {

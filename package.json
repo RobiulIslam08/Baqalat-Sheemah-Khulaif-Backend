@@ -13,6 +13,7 @@
     "prettier": "prettier --ignore-path .gitignore --write \"./src/**/*.+(js|ts|json)\"",
     "prettier:fix": "npm prettier --write src",
     "build": "tsc",
+    "zatca:onboard": "npx ts-node scripts/onboard-cli.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
