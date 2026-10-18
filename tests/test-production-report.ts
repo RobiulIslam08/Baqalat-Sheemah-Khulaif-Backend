@@ -7,7 +7,12 @@ async function testLiveProductionInvoice() {
   const { ZatcaServices } = await import('../src/app/modules/Zatca/zatca.service');
   const { ZatcaConfig } = await import('../src/app/modules/Zatca/zatca.model');
 
-  const cfg = await ZatcaConfig.findOne({ branchId: 'MAIN-BRANCH' });
+  let cfg = await ZatcaConfig.findOne({ branchId: 'MAIN-BRANCH' });
+  if (cfg && cfg.productionCsid && cfg.status !== 'onboarded') {
+    cfg.status = 'onboarded';
+    await cfg.save();
+    cfg = await ZatcaConfig.findOne({ branchId: 'MAIN-BRANCH' });
+  }
   console.log('--- Current ZATCA Config ---');
   console.log('Environment:', cfg?.environment);
   console.log('Status:', cfg?.status);
@@ -45,6 +50,49 @@ async function testLiveProductionInvoice() {
     console.log('Validation Warnings:', JSON.stringify(res.validationWarnings || []));
   } catch (err: any) {
     console.error('Invoice processing failed:', err?.message || err);
+  }
+
+  console.log('\n--- Processing Live Production Standard Invoice (Clearance) ---');
+  const stdNumber = `INV-STD-${Date.now()}`;
+  try {
+    const stdRes = await ZatcaServices.processInvoice({
+      branchId: 'MAIN-BRANCH',
+      invoiceNumber: stdNumber,
+      invoiceType: 'standard',
+      transactionType: 'invoice_388',
+      customer: {
+        name: 'Company Buyer Ltd',
+        vatNumber: '310123456700003',
+        crn: '1010123456',
+        street: 'King Fahd Rd',
+        buildingNumber: '1122',
+        city: 'Riyadh',
+        district: 'Al Olaya',
+        postalCode: '12214',
+        countryCode: 'SA',
+      },
+      items: [
+        {
+          name: 'Commercial Consulting',
+          quantity: 1,
+          unitPrice: 1000.0,
+          vatRate: 15,
+          vatCategory: 'S',
+        },
+      ],
+      totalExclusiveVat: 1000.0,
+      totalVatAmount: 150.0,
+      totalInclusiveVat: 1150.0,
+    });
+
+    console.log('Standard Invoice processed:');
+    console.log('Invoice Number:', stdRes.invoiceNumber);
+    console.log('UUID:', stdRes.uuid);
+    console.log('ZATCA Status:', stdRes.zatcaStatus);
+    console.log('Validation Errors:', JSON.stringify(stdRes.validationErrors || []));
+    console.log('Validation Warnings:', JSON.stringify(stdRes.validationWarnings || []));
+  } catch (err: any) {
+    console.error('Standard Invoice failed:', err?.message || err);
   }
 
   await mongoose.disconnect();

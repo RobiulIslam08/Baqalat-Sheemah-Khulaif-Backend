@@ -136,18 +136,27 @@ ${signedPropertiesInXml}
     const totalInclusive = this.extractSingleTagContent(rawXml, 'cbc:TaxInclusiveAmount');
     const totalVat = this.extractTagContent(rawXml, 'cac:TaxTotal', 'cbc:TaxAmount');
 
-    // QR Timestamp matching KSA issue date and time
-    const qrTimestamp = issueDate && issueTime ? `${issueDate}T${issueTime}` : signingTime;
+    // QR Timestamp strictly matching Invoice Issue Date and Time (KSA-25)
+    let qrTimestamp = signingTime;
+    if (issueDate && issueTime) {
+      qrTimestamp = `${issueDate.trim()}T${issueTime.trim()}`;
+    }
 
     // Extract SubjectPublicKeyInfo DER bytes (Tag 8) and certificate CA signature bytes (Tag 9)
-    const derBuf = Buffer.from(certDetails.derBase64, 'base64');
-    const x509Obj = new crypto.X509Certificate(derBuf);
-    const spkiDer = x509Obj.publicKey.export({ type: 'spki', format: 'der' });
-
-    const lastBitIndex = derBuf.lastIndexOf(0x03);
+    let spkiDer: Buffer;
     let certCaSig: Buffer | undefined;
-    if (lastBitIndex > 0 && derBuf[lastBitIndex + 2] === 0) {
-      certCaSig = derBuf.subarray(lastBitIndex + 3, lastBitIndex + 3 + derBuf[lastBitIndex + 1] - 1);
+
+    try {
+      // Use @fidm/x509 for robust ASN.1 parsing of raw public key and CA signature
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Certificate } = require('@fidm/x509');
+      const parsedCert = Certificate.fromPEM(Buffer.from(certDetails.pem));
+      spkiDer = parsedCert.publicKeyRaw;
+      certCaSig = parsedCert.signature;
+    } catch {
+      const derBuf = Buffer.from(certDetails.derBase64, 'base64');
+      const x509Obj = new crypto.X509Certificate(derBuf);
+      spkiDer = x509Obj.publicKey.export({ type: 'spki', format: 'der' });
     }
 
     // TLV Tags:
