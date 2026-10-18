@@ -27,44 +27,46 @@ export class ZatcaSignerService {
     // 3. Signing timestamp in ISO 8601 UTC format (strictly without milliseconds per ZATCA rules)
     const signingTime = new Date().toISOString().split('.')[0] + 'Z';
 
-    // 4. Construct xades:SignedProperties XML
-    const signedPropertiesXml = `<xades:SignedProperties xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" Id="xadesSignedProperties">
-        <xades:SignedSignatureProperties>
-            <xades:SigningTime>${signingTime}</xades:SigningTime>
-            <xades:SigningCertificate>
-                <xades:Cert>
-                    <xades:CertDigest>
-                        <ds:DigestMethod xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                        <ds:DigestValue xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${certDetails.certDigest}</ds:DigestValue>
-                    </xades:CertDigest>
-                    <xades:IssuerSerial>
-                        <ds:X509IssuerName xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${certDetails.issuerName}</ds:X509IssuerName>
-                        <ds:X509SerialNumber xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${certDetails.serialNumber}</ds:X509SerialNumber>
-                    </xades:IssuerSerial>
-                </xades:Cert>
-            </xades:SigningCertificate>
-            <xades:SignaturePolicyIdentifier>
-                <xades:SignaturePolicyId>
-                    <xades:SigPolicyId>
-                        <xades:Identifier>https://zatca.gov.sa/2021/e-invoicing/policy</xades:Identifier>
-                    </xades:SigPolicyId>
-                    <xades:SigPolicyHash>
-                        <ds:DigestMethod xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                        <ds:DigestValue xmlns:ds="http://www.w3.org/2000/09/xmldsig#">dMoMvtcG5aIzgYo0tIsSQeVJBDnUnfSOfBpxXrmor0Y=</ds:DigestValue>
-                    </xades:SigPolicyHash>
-                </xades:SignaturePolicyId>
-            </xades:SignaturePolicyIdentifier>
-        </xades:SignedSignatureProperties>
-    </xades:SignedProperties>`;
+    // 4. Construct xades:SignedProperties XML for hashing
+    const signedPropertiesForSigning = `<xades:SignedProperties xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" Id="xadesSignedProperties">
+                                    <xades:SignedSignatureProperties>
+                                        <xades:SigningTime>${signingTime}</xades:SigningTime>
+                                        <xades:SigningCertificate>
+                                            <xades:Cert>
+                                                <xades:CertDigest>
+                                                    <ds:DigestMethod xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                                                    <ds:DigestValue xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${certDetails.certDigest}</ds:DigestValue>
+                                                </xades:CertDigest>
+                                                <xades:IssuerSerial>
+                                                    <ds:X509IssuerName xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${certDetails.issuerName}</ds:X509IssuerName>
+                                                    <ds:X509SerialNumber xmlns:ds="http://www.w3.org/2000/09/xmldsig#">${certDetails.serialNumber}</ds:X509SerialNumber>
+                                                </xades:IssuerSerial>
+                                            </xades:Cert>
+                                        </xades:SigningCertificate>
+                                    </xades:SignedSignatureProperties>
+                                </xades:SignedProperties>`.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    // Canonicalize SignedProperties and calculate SHA-256 digest
-    const canonicalSignedProperties =
-      ZatcaCryptoHelper.canonicalizeXml(signedPropertiesXml, 'c14n') ||
-      signedPropertiesXml.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-    const signedPropertiesDigest = crypto
-      .createHash('sha256')
-      .update(canonicalSignedProperties, 'utf8')
-      .digest('base64');
+    const signedPropertiesBytes = Buffer.from(signedPropertiesForSigning, 'utf8');
+    const signedPropertiesHashHex = crypto.createHash('sha256').update(signedPropertiesBytes).digest('hex');
+    const signedPropertiesDigest = Buffer.from(signedPropertiesHashHex).toString('base64');
+
+    const signedPropertiesInXml = `<xades:SignedProperties Id="xadesSignedProperties">
+                                    <xades:SignedSignatureProperties>
+                                        <xades:SigningTime>${signingTime}</xades:SigningTime>
+                                        <xades:SigningCertificate>
+                                            <xades:Cert>
+                                                <xades:CertDigest>
+                                                    <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                                                    <ds:DigestValue>${certDetails.certDigest}</ds:DigestValue>
+                                                </xades:CertDigest>
+                                                <xades:IssuerSerial>
+                                                    <ds:X509IssuerName>${certDetails.issuerName}</ds:X509IssuerName>
+                                                    <ds:X509SerialNumber>${certDetails.serialNumber}</ds:X509SerialNumber>
+                                                </xades:IssuerSerial>
+                                            </xades:Cert>
+                                        </xades:SigningCertificate>
+                                    </xades:SignedSignatureProperties>
+                                </xades:SignedProperties>`.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
     // 5. Construct ds:SignedInfo XML
     const signedInfoXml = `<ds:SignedInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
@@ -73,24 +75,30 @@ export class ZatcaSignerService {
         <ds:Reference Id="invoiceSignedData" URI="">
             <ds:Transforms>
                 <ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">
-                    <ds:XPath>not(ancestor-or-self::ext:UBLExtensions or ancestor-or-self::cac:Signature or ancestor-or-self::cac:AdditionalDocumentReference[cbc:ID="QR"])</ds:XPath>
+                    <ds:XPath>not(//ancestor-or-self::ext:UBLExtensions)</ds:XPath>
+                </ds:Transform>
+                <ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">
+                    <ds:XPath>not(//ancestor-or-self::cac:Signature)</ds:XPath>
+                </ds:Transform>
+                <ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">
+                    <ds:XPath>not(//ancestor-or-self::cac:AdditionalDocumentReference[cbc:ID='QR'])</ds:XPath>
                 </ds:Transform>
                 <ds:Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
             </ds:Transforms>
             <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
             <ds:DigestValue>${invoiceHash}</ds:DigestValue>
         </ds:Reference>
-        <ds:Reference Type="http://www.w3.org/2000/09/xmldsig#SignedProperties" URI="#xadesSignedProperties">
+        <ds:Reference Type="http://www.w3.org/2000/09/xmldsig#SignatureProperties" URI="#xadesSignedProperties">
             <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
             <ds:DigestValue>${signedPropertiesDigest}</ds:DigestValue>
         </ds:Reference>
     </ds:SignedInfo>`;
 
-    // Canonicalize ds:SignedInfo and sign with EC private key
-    const canonicalSignedInfo =
-      ZatcaCryptoHelper.canonicalizeXml(signedInfoXml, 'c14n') ||
-      signedInfoXml.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
-    const signatureValue = ZatcaCryptoHelper.signData(canonicalSignedInfo, privateKeyPem);
+    // Sign invoice hash with EC private key
+    const invoiceHashBytes = Buffer.from(invoiceHash, 'base64');
+    const signer = crypto.createSign('sha256');
+    signer.update(invoiceHashBytes);
+    const signatureValue = signer.sign(privateKeyPem, 'base64');
 
     // 6. Complete XAdES-EPES ds:Signature block
     const fullSignatureBlock = `<sig:UBLDocumentSignatures xmlns:sig="urn:oasis:names:specification:ubl:schema:xsd:CommonSignatureComponents-2" xmlns:sac="urn:oasis:names:specification:ubl:schema:xsd:SignatureAggregateComponents-2" xmlns:sbc="urn:oasis:names:specification:ubl:schema:xsd:SignatureBasicComponents-2">
@@ -107,7 +115,7 @@ ${signedInfoXml}
                         </ds:KeyInfo>
                         <ds:Object>
                             <xades:QualifyingProperties xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" Target="signature">
-${signedPropertiesXml}
+${signedPropertiesInXml}
                             </xades:QualifyingProperties>
                         </ds:Object>
                     </ds:Signature>

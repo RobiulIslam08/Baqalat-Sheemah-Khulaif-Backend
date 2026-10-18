@@ -106,6 +106,16 @@ export class ZatcaXmlGeneratorService {
     if (data.invoiceType === 'standard' && data.customer) {
       customerPartyXml = `    <cac:AccountingCustomerParty>
         <cac:Party>
+            <cac:PostalAddress>
+                <cbc:StreetName>${this.escapeXml(data.customer.streetName || 'Main Street')}</cbc:StreetName>
+                <cbc:BuildingNumber>${this.escapeXml(data.customer.buildingNumber || '1234')}</cbc:BuildingNumber>
+                <cbc:CitySubdivisionName>${this.escapeXml(data.customer.citySubdivision || 'Al-Olaya')}</cbc:CitySubdivisionName>
+                <cbc:CityName>${this.escapeXml(data.customer.cityName || 'Riyadh')}</cbc:CityName>
+                <cbc:PostalZone>${this.escapeXml(data.customer.postalCode || '12211')}</cbc:PostalZone>
+                <cac:Country>
+                    <cbc:IdentificationCode>${data.customer.countryCode || 'SA'}</cbc:IdentificationCode>
+                </cac:Country>
+            </cac:PostalAddress>
             ${
               data.customer.vatNumber
                 ? `<cac:PartyTaxScheme>
@@ -116,20 +126,6 @@ export class ZatcaXmlGeneratorService {
             </cac:PartyTaxScheme>`
                 : ''
             }
-            <cac:PostalAddress>
-                <cbc:StreetName>${this.escapeXml(data.customer.streetName || 'Main Street')}</cbc:StreetName>
-                <cbc:BuildingNumber>${this.escapeXml(data.customer.buildingNumber || '0000')}</cbc:BuildingNumber>
-                ${
-                  data.customer.citySubdivision
-                    ? `<cbc:CitySubdivisionName>${this.escapeXml(data.customer.citySubdivision)}</cbc:CitySubdivisionName>`
-                    : ''
-                }
-                <cbc:CityName>${this.escapeXml(data.customer.cityName || 'Riyadh')}</cbc:CityName>
-                <cbc:PostalZone>${this.escapeXml(data.customer.postalCode || '11111')}</cbc:PostalZone>
-                <cac:Country>
-                    <cbc:IdentificationCode>${data.customer.countryCode || 'SA'}</cbc:IdentificationCode>
-                </cac:Country>
-            </cac:PostalAddress>
             <cac:PartyLegalEntity>
                 <cbc:RegistrationName>${this.escapeXml(data.customer.name)}</cbc:RegistrationName>
             </cac:PartyLegalEntity>

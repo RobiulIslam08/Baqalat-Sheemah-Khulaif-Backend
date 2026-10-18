@@ -1,0 +1,9 @@
+import * as crypto from 'crypto';
+const b64 = 'MIICuzCCAmKgAwIBAgIGAaFNFBs3MAoGCCqGSM49BAMCMBUxEzARBgNVBAMMCmVJbnZvaWNpbmcwHhcNMjYxMDE4MDMzNTIwWhcNMzExMDE3MjEwMDAwWjCBujELMAkGA1UEBhMCU0ExIjAgBgNVBAsMGdin2YTZgdix2Lkg2KfZhNix2KbZitiz2YoxWTBXBgNVBAoMUNio2YLYp9mE2Kkg2LTZitmF2Ycg2K7ZhNmK2YEg2LnYp9mK2K8g2KfZhNi52YbYstmKINmE2YTZhdmI2KfYryDYp9mE2LrYsNin2KbZitipMSwwKgYDVQQDDCMxLVBPU3wyLU1BSU4tQlJBTkNIfDMtUE9TVGVybWluYWwwMTBWMBAGByqGSM49AgEGBSuBBAAKA0IABHL0H1Hqjr7d1UyssOd5/zeXkEqIn+QJjyH1PqgwCVMJrUXwaeDJZiazR9NDR7okF2RrZ9nikP+VcxCNfKo9aZSjgfowgfcwDAYDVR0TAQH/BAIwADCB5gYDVR0RBIHeMIHbpIHYMIHVMSwwKgYDVQQEDCMxLVBPU3wyLU1BSU4tQlJBTkNIfDMtUE9TVGVybWluYWwwMTEfMB0GCgmSJomT8ixkAQEMDzMwMDEyMzQ1Njc4OTAwMzENMAsGA1UEDAwEMTEwMDFbMFkGA1UEGgxSMTIzNCDDmMKuw5nChcOZworDmMKzIMOZwoXDmMK0w5nCisOYwrcgLSDDmcKFw5jCrsOYwrfDmMK3IMOYwqfDmcKEw5jCrcOYwrPDmMKnw5nChTEYMBYGA1UEDwwPRm9vZCAmIEJldmVyYWdlMAoGCCqGSM49BAMCA0cAMEQCIHQg1al7I3YihO1hUTIUd3XzfV1lq9Y+PuVlckYnrwBeAiAPRdPR+VCeSsM5L9l4BwoSyWnG0fMF723w7+05u8RPVg==';
+const der = Buffer.from(b64, 'base64');
+const hBase64 = crypto.createHash('sha256').update(der).digest('base64');
+const hHex = crypto.createHash('sha256').update(der).digest('hex');
+const hHexBase64 = Buffer.from(hHex).toString('base64');
+console.log('Raw DER SHA256 (Base64):', hBase64);
+console.log('Hex:', hHex);
+console.log('Hex Base64:', hHexBase64);

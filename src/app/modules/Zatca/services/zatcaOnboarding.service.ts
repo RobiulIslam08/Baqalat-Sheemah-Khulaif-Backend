@@ -87,158 +87,148 @@ export class ZatcaOnboardingService {
     }
 
     const api = new ZatcaApiService(config.environment);
-    const initialPih = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI0NjcyOWQ3M2EyN2ZiNTdlOQ==';
+    let prevHash = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWI4NjExN2Q5MTU0NWNmNEY=';
+    let icv = 1;
 
-    // 1. Simplified test invoice
-    const simplifiedUuid = randomUUID();
-    const simplifiedBuild = this.xmlGenerator.buildInvoiceXml(
+    const standardCustomer = {
+      name: 'Compliance B2B Buyer LLC',
+      vatNumber: '300000000000003',
+      streetName: 'Olaya St',
+      buildingNumber: '1234',
+      citySubdivision: 'Al-Olaya',
+      cityName: 'Riyadh',
+      postalCode: '12211',
+      countryCode: 'SA',
+    };
+
+    const steps = [
       {
-        invoiceNumber: `COMPLIANCE-SIMP-${Date.now()}`,
-        uuid: simplifiedUuid,
-        invoiceType: 'simplified',
-        items: [
-          {
-            name: 'Compliance Test Product',
-            quantity: 1,
-            unitPrice: 100,
-            vatRate: 15,
-            vatCategory: 'S',
-          },
-        ],
-        totalExclusiveVat: 100,
-        totalVatAmount: 15,
-        totalInclusiveVat: 115,
+        key: 'simplifiedInvoice',
+        name: 'Simplified Invoice (388)',
+        invoiceType: 'simplified' as const,
+        transactionType: 'invoice_388' as const,
+        clearance: false,
       },
-      config,
-      1,
-      initialPih
-    );
-
-    const simplifiedSigned = this.signer.signInvoiceXml(
-      simplifiedBuild.xml,
-      config.privateKey,
-      config.complianceCsid
-    );
-
-    const simpResult = await api.submitComplianceInvoice(
-      config.complianceCsid,
-      config.complianceSecret,
-      simplifiedSigned.invoiceHash,
-      simplifiedUuid,
-      simplifiedSigned.signedXml,
-      false
-    );
-
-    // 2. Standard test invoice
-    const standardUuid = randomUUID();
-    const standardBuild = this.xmlGenerator.buildInvoiceXml(
       {
-        invoiceNumber: `COMPLIANCE-STD-${Date.now()}`,
-        uuid: standardUuid,
-        invoiceType: 'standard',
-        customer: {
-          name: 'Compliance B2B Buyer LLC',
-          vatNumber: '300000000000003',
-          streetName: 'Olaya St',
-          buildingNumber: '1111',
-          cityName: 'Riyadh',
-          postalCode: '12211',
-          countryCode: 'SA',
+        key: 'simplifiedCreditNote',
+        name: 'Simplified Credit Note (381)',
+        invoiceType: 'simplified' as const,
+        transactionType: 'credit_note_381' as const,
+        clearance: false,
+        billingReferenceId: 'COMPLIANCE-SIMP-REF',
+      },
+      {
+        key: 'simplifiedDebitNote',
+        name: 'Simplified Debit Note (383)',
+        invoiceType: 'simplified' as const,
+        transactionType: 'debit_note_383' as const,
+        clearance: false,
+        billingReferenceId: 'COMPLIANCE-SIMP-REF',
+      },
+      {
+        key: 'standardInvoice',
+        name: 'Standard Invoice (388)',
+        invoiceType: 'standard' as const,
+        transactionType: 'invoice_388' as const,
+        clearance: true,
+        customer: standardCustomer,
+      },
+      {
+        key: 'standardCreditNote',
+        name: 'Standard Credit Note (381)',
+        invoiceType: 'standard' as const,
+        transactionType: 'credit_note_381' as const,
+        clearance: true,
+        customer: standardCustomer,
+        billingReferenceId: 'COMPLIANCE-STD-REF',
+      },
+      {
+        key: 'standardDebitNote',
+        name: 'Standard Debit Note (383)',
+        invoiceType: 'standard' as const,
+        transactionType: 'debit_note_383' as const,
+        clearance: true,
+        customer: standardCustomer,
+        billingReferenceId: 'COMPLIANCE-STD-REF',
+      },
+    ];
+
+    const results: Record<string, any> = {};
+    let allPassed = true;
+
+    for (const step of steps) {
+      const stepUuid = randomUUID();
+      const stepBuild = this.xmlGenerator.buildInvoiceXml(
+        {
+          invoiceNumber: `COMP-${Date.now()}-${icv}`,
+          uuid: stepUuid,
+          invoiceType: step.invoiceType,
+          transactionType: step.transactionType,
+          billingReferenceId: (step as any).billingReferenceId,
+          customer: (step as any).customer,
+          items: [
+            {
+              name: 'Compliance Test Product',
+              quantity: 2,
+              unitPrice: 25,
+              vatRate: 15,
+              vatCategory: 'S',
+            },
+          ],
+          totalExclusiveVat: 50,
+          totalVatAmount: 7.5,
+          totalInclusiveVat: 57.5,
         },
-        items: [
-          {
-            name: 'Compliance Test Wholesale Item',
-            quantity: 10,
-            unitPrice: 50,
-            vatRate: 15,
-            vatCategory: 'S',
-          },
-        ],
-        totalExclusiveVat: 500,
-        totalVatAmount: 75,
-        totalInclusiveVat: 575,
-      },
-      config,
-      2,
-      simplifiedSigned.invoiceHash
-    );
-
-    const standardSigned = this.signer.signInvoiceXml(
-      standardBuild.xml,
-      config.privateKey,
-      config.complianceCsid
-    );
-
-    const stdResult = await api.submitComplianceInvoice(
-      config.complianceCsid,
-      config.complianceSecret,
-      standardSigned.invoiceHash,
-      standardUuid,
-      standardSigned.signedXml,
-      true
-    );
-
-    // 3. Simplified Credit Note (Refund/Amendment test)
-    const creditUuid = randomUUID();
-    const creditBuild = this.xmlGenerator.buildInvoiceXml(
-      {
-        invoiceNumber: `COMPLIANCE-CN-${Date.now()}`,
-        uuid: creditUuid,
-        invoiceType: 'simplified',
-        transactionType: 'credit_note_381',
-        billingReferenceId: `COMPLIANCE-SIMP-REF`,
-        items: [
-          {
-            name: 'Compliance Test Returned Item',
-            quantity: 1,
-            unitPrice: 20,
-            vatRate: 15,
-            vatCategory: 'S',
-          },
-        ],
-        totalExclusiveVat: 20,
-        totalVatAmount: 3,
-        totalInclusiveVat: 23,
-      },
-      config,
-      3,
-      standardSigned.invoiceHash
-    );
-
-    const creditSigned = this.signer.signInvoiceXml(
-      creditBuild.xml,
-      config.privateKey,
-      config.complianceCsid
-    );
-
-    let creditResult: any = { success: true };
-    try {
-      creditResult = await api.submitComplianceInvoice(
-        config.complianceCsid,
-        config.complianceSecret,
-        creditSigned.invoiceHash,
-        creditUuid,
-        creditSigned.signedXml,
-        false
+        config,
+        icv++,
+        prevHash
       );
-    } catch (cnErr) {
-      console.warn('[ZATCA Onboarding] Credit note test notice:', cnErr);
+
+      const signed = this.signer.signInvoiceXml(
+        stepBuild.xml,
+        config.privateKey!,
+        config.complianceCsid!
+      );
+      prevHash = signed.invoiceHash;
+
+      let stepResult: any;
+      try {
+        stepResult = await api.submitComplianceInvoice(
+          config.complianceCsid!,
+          config.complianceSecret!,
+          signed.invoiceHash,
+          stepUuid,
+          signed.signedXml,
+          step.clearance
+        );
+      } catch (err: any) {
+        stepResult = { success: false, error: err?.message || err };
+      }
+
+      results[step.key] = stepResult;
+
+      const isPass =
+        stepResult.success ||
+        stepResult.statusCode === 200 ||
+        stepResult.rawBody?.includes('already completed') ||
+        stepResult.data?.message?.includes('already completed') ||
+        (Array.isArray(stepResult.data?.errors) &&
+          stepResult.data.errors.some((e: any) => e.message?.includes('already completed')));
+
+      if (!isPass) {
+        allPassed = false;
+        console.warn(`[ZATCA Onboarding] Compliance step ${step.name} did not pass:`, stepResult);
+      }
     }
 
-    const passed = (simpResult.success || simpResult.statusCode === 200) && (stdResult.success || stdResult.statusCode === 200);
-
-    if (passed) {
+    if (allPassed) {
       config.status = 'compliance_passed';
       await ZatcaConfig.findOneAndUpdate({ branchId: config.branchId }, { status: 'compliance_passed' });
     }
 
     return {
-      success: passed,
-      details: {
-        simplified: simpResult,
-        standard: stdResult,
-        creditNote: creditResult,
-      },
+      success: allPassed,
+      details: results,
     };
   }
 

@@ -439,7 +439,9 @@ businessCategory = ${businessCategory}
 
     const x509 = new crypto.X509Certificate(pem);
     const derBytes = x509.raw;
-    const certDigest = crypto.createHash('sha256').update(derBytes).digest('base64');
+    const cleanCertB64 = derBytes.toString('base64');
+    const certDigestHex = crypto.createHash('sha256').update(cleanCertB64).digest('hex');
+    const certDigest = Buffer.from(certDigestHex).toString('base64');
 
     // Parse issuer and serial
     const issuerName = x509.issuer ? x509.issuer.replace(/\r?\n/g, ', ') : '';
