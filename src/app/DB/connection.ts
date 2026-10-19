@@ -18,6 +18,12 @@ export async function connectDB(): Promise<void> {
       await seedAdmin();
       await seedDemo();
       await normalizeProductIds();
+      try {
+        const { ProductService } = await import('../modules/Product/product.service');
+        await ProductService.purgeSoftDeletedProducts();
+      } catch (purgeErr) {
+        console.warn('Failed to purge soft-deleted products:', purgeErr);
+      }
       await ensureLicense();
       const name = mongoose.connection.name || 'sheemah_pos';
       console.log(`Database connected: MongoDB (${name})`);

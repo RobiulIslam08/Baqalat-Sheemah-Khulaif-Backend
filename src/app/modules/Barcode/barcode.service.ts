@@ -15,7 +15,6 @@ const generateLabels = async (payload: IBarcodeJob, userId: string) => {
   const barcodeValue = payload.barcodeValue || product.productCode;
   const otherProduct = await Product.findOne({
     $or: [{ productCode: barcodeValue }, { barcodeValue }],
-    isDeleted: { $in: [true, false] },
   });
   if (otherProduct && otherProduct.productCode !== product.productCode) {
     throw new AppError(httpStatus.CONFLICT, 'Barcode is already used by another product');

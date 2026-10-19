@@ -19,7 +19,6 @@ const createProduct = async (payload: IProduct) => {
       { productCode: payload.productCode },
       { productId: payload.productId },
     ],
-    isDeleted: { $in: [true, false] },
   });
 
   if (existing) {
@@ -35,10 +34,7 @@ const createProduct = async (payload: IProduct) => {
 
 // Compute the next serial product ID (plain number as string, e.g. "1", "2", "3"...)
 const getNextProductId = async () => {
-  const products = await Product.find(
-    { isDeleted: { $in: [true, false] } },
-    'productId',
-  ).lean();
+  const products = await Product.find({}, 'productId').lean();
 
   let max = 0;
   for (const doc of products as any[]) {
@@ -82,7 +78,6 @@ const updateProduct = async (id: string, payload: Partial<IProduct>) => {
     const duplicate = await Product.findOne({
       productCode: payload.productCode,
       _id: { $ne: id },
-      isDeleted: { $in: [true, false] },
     });
     if (duplicate) {
       throw new AppError(httpStatus.CONFLICT, 'Product with this code or ID already exists');
@@ -101,15 +96,19 @@ const updateProduct = async (id: string, payload: Partial<IProduct>) => {
   return product;
 };
 
-// Soft delete product
+/** Permanently remove soft-deleted product rows left by older versions. */
+const purgeSoftDeletedProducts = async () => {
+  await Product.deleteMany({ isDeleted: true });
+};
+
+// Hard delete product from the database
 const deleteProduct = async (id: string) => {
   const product = await Product.findById(id);
   if (!product) {
     throw new AppError(httpStatus.NOT_FOUND, 'Product not found');
   }
 
-  product.isDeleted = true;
-  await product.save();
+  await Product.deleteMany({ _id: id });
   return product;
 };
 
@@ -120,4 +119,5 @@ export const ProductService = {
   updateProduct,
   deleteProduct,
   getNextProductId,
+  purgeSoftDeletedProducts,
 };
