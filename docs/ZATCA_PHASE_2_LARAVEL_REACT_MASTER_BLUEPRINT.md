@@ -1143,8 +1143,8 @@ class ZatcaApiService
     {
         $this->baseUrl = match ($environment) {
             'production' => 'https://gw-fatoora.zatca.gov.sa/e-invoicing/core',
-            'simulation' => 'https://gw-fatoora.simulation.zatca.gov.sa/e-invoicing/core',
-            default      => 'https://gw-fatoora.sandbox.zatca.gov.sa/e-invoicing/core',
+            'simulation' => 'https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation',
+            default      => 'https://gw-fatoora.zatca.gov.sa/e-invoicing/developer-portal', // Sandbox Developer Portal
         };
     }
 

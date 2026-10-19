@@ -999,13 +999,12 @@ export class ZatcaApiService {
   private apiVersion = 'V2';
 
   constructor(environment: 'sandbox' | 'simulation' | 'production' = 'sandbox') {
-    if (environment === 'production') {
-      this.baseUrl = 'https://gw-fatoora.zatca.gov.sa/e-invoicing/core';
-    } else if (environment === 'simulation') {
-      this.baseUrl = 'https://gw-fatoora.simulation.zatca.gov.sa/e-invoicing/core';
-    } else {
-      this.baseUrl = 'https://gw-fatoora.sandbox.zatca.gov.sa/e-invoicing/core';
-    }
+    const endpoints = {
+      sandbox: 'https://gw-fatoora.zatca.gov.sa/e-invoicing/developer-portal',
+      simulation: 'https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation',
+      production: 'https://gw-fatoora.zatca.gov.sa/e-invoicing/core',
+    };
+    this.baseUrl = endpoints[environment] || endpoints.sandbox;
   }
 
   public async requestComplianceCsid(otp: string, csrPem: string): Promise<IZatcaApiResponse> {
