@@ -7,6 +7,8 @@ import { User } from '../User/user.model';
 
 const License = createCollection('licenses');
 const LICENSE_ID = 'shop-license';
+/** Calendar expiry must not lock the shop. A past date is moved here on the next check. */
+const OPEN_UNTIL = '2099-12-31';
 
 type LicenseFields = {
   validUntil: string;
@@ -89,16 +91,26 @@ async function readRaw() {
   return License.findById(LICENSE_ID);
 }
 
+function openLicense(from?: Partial<LicenseFields>): LicenseFields {
+  return {
+    validUntil: OPEN_UNTIL,
+    suspended: false,
+    readOnly: Boolean(from?.readOnly),
+    supportPhone: String(from?.supportPhone || ''),
+    note: String(from?.note || ''),
+  };
+}
+
+async function writeLicense(doc: any, fields: LicenseFields) {
+  Object.assign(doc, fields, { signature: sign(fields) });
+  await doc.save();
+  return fields;
+}
+
 export async function ensureLicense() {
   const existing = await readRaw();
   if (existing) return existing;
-  const fields: LicenseFields = {
-    validUntil: addDays(todayString(), 30),
-    suspended: false,
-    readOnly: false,
-    supportPhone: '',
-    note: '',
-  };
+  const fields = openLicense();
   return License.create({
     _id: LICENSE_ID,
     ...fields,
@@ -108,10 +120,20 @@ export async function ensureLicense() {
 
 async function verified() {
   const doc = await ensureLicense();
-  const fields = fieldsOf(doc);
-  const signatureOk = await signatureMatches(doc);
-  const expired = !signatureOk || fields.validUntil < todayString();
-  return { doc, fields, signatureOk, expired };
+  let signatureOk = await signatureMatches(doc);
+  let fields = fieldsOf(doc);
+
+  // A signed suspension is intentional. Every other lock is renewed so a past date cannot block login.
+  if (signatureOk && fields.suspended) {
+    return { doc, fields, signatureOk, expired: fields.validUntil < todayString() };
+  }
+
+  if (!signatureOk || fields.validUntil < todayString()) {
+    fields = await writeLicense(doc, openLicense(signatureOk ? fields : undefined));
+    signatureOk = true;
+  }
+
+  return { doc, fields, signatureOk, expired: false };
 }
 
 function blockMessage(fields: LicenseFields, suspended: boolean) {
